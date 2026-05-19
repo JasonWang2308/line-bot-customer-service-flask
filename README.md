@@ -37,14 +37,14 @@ Started with Dify + Make. Fast for "hello world", but conditional flow, state, a
 ### 第 1 版：RAG
 
 - 把客服文件切 chunk、做 embedding、找相近段落回答
-- 撞牆點：客服 Q&A 是「結構化」的—— 同樣 topic 配不同 action 答案完全不同（升級 vs 取消方案），相似度比對不出這種邏輯；回答品質飄忽
+- 撞牆點：客服 Q&A 是「結構化」的—— 同樣 topic 配不同 action 答案完全不同，相似度比對不出這種邏輯；回答品質不穩定
 
 Switched to RAG. Wrong fit for structured Q&A where intent dimensions matter as much as topic.
 
 ### 第 2 版：類專家系統（規則 + tag set）
 
 - 每筆 Q&A 預先標 dimension tag，使用者輸入解析成 tag set，做集合交集找答案
-- 撞牆點：每新增 Q 都要手動補 tag，admin 看不懂 JSON
+- 撞牆點：每新增 Q 都要手動補 tag，admin 非工程師看不懂 JSON
 
 A tag-based expert system. Better than RAG for structured Q&A, but tagging became a maintenance burden and admins couldn't read the JSON.
 
@@ -71,7 +71,7 @@ A tag-based expert system. Better than RAG for structured Q&A, but tagging becam
 
 ### 1. 研究階段 / Research
 
-- 比較了 RAG、規則引擎、決策樹三條路；對結構化客服情境，**決策樹勝**
+- 比較了 RAG、規則引擎、決策樹三條路；對結構化客服情境，**決策樹為符合限制的解答**
 - 讀了 LINE Messaging API webhook / Quick Reply / Postback 的限制（13 顆 button、20 字 label）
 - 學 d3.js 怎麼畫樹狀圖（樹狀預覽分頁）
 - GCP Compute Engine、Docker、靜態網域、HTTPS 部署都是這個專案邊做邊補的
