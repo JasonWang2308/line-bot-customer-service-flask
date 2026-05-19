@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# SQLite
+*.db
+*.db-journal
+
+# Logs
+*.log
+app.log
+nohup.out
+
+# Secrets — DO NOT COMMIT
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Chat history (runtime data)
+Chat History/
