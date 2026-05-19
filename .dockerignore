@@ -1,0 +1,34 @@
+# Python 編譯快取
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 環境變數（金鑰）→ 由 docker-compose 注入，不要包進 image
+.env
+
+# 系統 / 編輯器
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+
+# Docker 相關（不需要重複帶進 image）
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 文件（節省 image 體積；本地會 mount README.md 不影響使用）
+DEPLOY.md
+DOCKER.md
+
+# 留言 SQLite — 容器啟動時會自己建空檔
+Chat History/session.db
+Chat History/*.db-journal
+Chat History/*.db-wal
+Chat History/*.db-shm
+
+# 早期實作殘留（不再使用，但保留在原位以免誤刪）
+chatbot/

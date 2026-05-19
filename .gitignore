@@ -9,11 +9,11 @@ venv/
 # SQLite
 *.db
 *.db-journal
+Chat History/
 
 # Logs
 *.log
 app.log
-nohup.out
 
 # Secrets — DO NOT COMMIT
 .env
@@ -24,5 +24,5 @@ nohup.out
 .vscode/
 .idea/
 
-# Chat history (runtime data)
-Chat History/
+# Docker runtime
+.docker-data/

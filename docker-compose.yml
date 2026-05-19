@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────
+# LINE Bot 本地模擬器 — Docker Compose
+#
+# 第一次啟動：
+#   docker compose up -d --build
+#
+# 開啟瀏覽器：
+#   http://localhost:5000/                LINE 風格手機模擬器（聊天列表 → 對話）
+#   http://localhost:5000/editor          選單編輯器
+#   http://localhost:5000/admin/messages  留言管理
+#
+# 看 log：     docker compose logs -f
+# 停止：       docker compose down
+# 重新建構：   docker compose up -d --build --force-recreate
+#
+# 資料持久化（即使刪容器也保留）：
+#   - menu.json / templates.json：綁到 host 同名檔，編輯器存檔直接寫回
+#   - Chat History/：SQLite 留言資料庫
+#   - static/img/：rich-menu 圖片，方便日後換圖
+# ─────────────────────────────────────────────────────────────
+
+services:
+  simulator:
+    build: .
+    image: line-bot-simulator:latest
+    container_name: line-bot-simulator
+    ports:
+      - "5000:5000"
+    environment:
+      # 留空 → 純本地模擬模式（/callback webhook 不會註冊）
+      # 填入 → LINE 真機也會跑（需要 ngrok 或公網 HTTPS）
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:-}
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:-}
+      - TZ=Asia/Taipei
+    volumes:
+      # 編輯器寫回的 menu / templates 直接落到 host
+      - "./menu.json:/app/menu.json"
+      - "./templates.json:/app/templates.json"
+      # 留言 SQLite
+      - "./Chat History:/app/Chat History"
+      # rich-menu 圖（方便換）
+      - "./static/img:/app/static/img"
+    restart: unless-stopped

@@ -1,156 +1,258 @@
-# LINE Bot Customer Service (Flask)
+# LINE Bot Customer Service (Decision-Tree Edition)
 
-LINE 機器人 + Web 介面的雙通道客服系統。使用者用自然語言問問題，後端先把詞彙正規化成「維度 ID」，再走決策樹追問釐清，最後用反向索引找到最佳 Q&A 回覆；無法回答時把對話轉成留言給真人客服處理，後台可以看待處理與已處理。
+一個跑在自己電腦上的 LINE 客服模擬器：手機外殼模擬 LINE 對話、視覺化選單樹編輯器、真人客服留言後台，三個畫面齊全。決策樹改完即時生效，不用重啟，不用 ngrok。
 
-A LINE bot + web chat customer-service system. User input is normalised into dimension IDs, fed through a decision-tree clarifier, then matched against a small Q&A knowledge base via an inverted tag index. If no match, the conversation is logged as a ticket for human agents, viewable in a built-in admin page.
+A local LINE customer-service simulator. Three pages: a LINE-style phone shell for the chat preview, a visual decision-tree editor, and a human-agent inbox. Edit the tree in the browser and the bot picks it up immediately — no restart, no ngrok needed.
 
-> ⚠️ 知識庫（`Knowledge/qa.json`、`dictionary.json`、`rules.json`）的內容是 placeholder，示範通用 SaaS 客服情境。請替換為自己的業務 Q&A 後再使用。
-> The knowledge base files are placeholder content showing a generic SaaS customer-service example. Replace them with your own Q&A.
-
----
-
-## 它在做什麼 / What it does
-
-1. **輸入解析**：使用者打 `我想換方案` → 用 greedy longest-match 對到字典裡的同義詞（`subscription`、`change plan` …）→ 解析出維度 IDs（`C03`：Subscription, `A01`：How-to）
-2. **決策樹追問**：如果還缺維度（例如沒指定 action），系統會自動丟出 quick-reply 按鈕讓使用者選
-3. **規則比對**：用 rules.json 定義的條件（`{"C": ["C02", "C04"]}` 之類）動態決定要追問哪些維度
-4. **反向索引匹配**：把所有已 resolved 的 IDs 做交集查 QA，找出唯一最相關的答案
-5. **真人 fallback**：找不到、衝突、或使用者主動要求時，蒐集留言 → 寫到 `messages` 表 → 真人客服在 `/admin/messages` 處理
-6. **雙通道**：LINE 通道走 SQLite session；Web 通道用記憶體 session 省 I/O，但結果一樣寫 DB
+> ⚠️ `menu.json` 與 `templates.json` 的內容是通用 SaaS 客服範例 (Account / Billing / Subscription / Other)。換成自己的業務內容即可使用。
+> The decision tree and reply templates are generic SaaS customer-service placeholders.
 
 ---
 
-## 技術棧 / Tech stack
+## 三個入口 / The three entry points
 
-- **Flask** — HTTP framework
-- **line-bot-sdk (v3)** — LINE messaging API
-- **SQLite** — sessions / conversations / messages 三張表
-- **純 Python 邏輯引擎** — 無 LLM、無 ML，全部是顯式規則（matcher.py）
-- **GCP Compute Engine** + **靜態 IP / 域名** — production deploy
+| URL | 用途 / Purpose | 適合誰 / For |
+|---|---|---|
+| `http://localhost:5000/` | LINE 風格手機殼，模擬使用者跟客服 bot 對話 / LINE-style phone shell | dev / demo |
+| `http://localhost:5000/editor` | 視覺化選單樹編輯器 / Visual decision-tree editor | admins |
+| `http://localhost:5000/admin/messages` | 真人客服留言管理頁 / Human-agent inbox | support team |
 
----
-
-## 倉庫結構 / Repo layout
-
-```
-.
-├── app.py                # Flask routes: /callback (LINE) /chat (web) /admin/messages
-├── matcher.py            # 純邏輯：parse_input → compute_pending_dims → match QA
-├── db.py                 # SQLite layer：sessions / conversations / messages
-├── Knowledge/
-│   ├── dictionary.json   # term → dimension ID（含同義詞）
-│   ├── rules.json        # ask_order + 條件式追問規則
-│   └── qa.json           # 終端答案，tags 指回 dimension IDs
-├── requirements.txt
-├── docs-architecture.md  # DB 三張表的職責 + 兩條寫入路徑
-└── .env.example
-```
+無需 LINE Developers 帳號，無需 ngrok。
 
 ---
 
 ## 我怎麼做出這個 / How I built it
 
-這個專案的路徑比較曲折，因為我換了好幾次「怎麼做」。
+這個專案經過幾次重新設計，每次都因為前一版撞到牆才換做法。
 
-This one took the most pivoting — I went through several different approaches before landing on the current one.
+This one went through several rewrites — each previous version hit a wall.
 
-### 第 0 版：no-code / SaaS 起步
+### 第 0 版：no-code（Dify / Make）
 
-最早用 **Dify** + **Make**：拖元件、串 webhook，幾分鐘就有個能回答的 LINE bot。但很快撞牆——
-- 答案邏輯一複雜（多條件、需要追問），no-code 工具的條件分支很難維護
-- 對話狀態管理（逾時、回上一層）做不太出來
-- 部署 / 監控 / 改 prompt 都得回 SaaS 後台，不在自己的 git 裡
+- 拖元件、串 webhook，幾分鐘就有個能回答的 LINE bot
+- 撞牆點：條件分支稍微複雜（多層追問、回上一層、逾時重置）就難維護；對話狀態管理做不太出來；改流程都得回 SaaS 後台、不在 git 裡
 
-I started with no-code: **Dify** + **Make** for the LINE webhook. Easy to get something working in minutes, but conditional logic and state management both hit a wall fast.
+Started with Dify + Make. Fast for "hello world", but conditional flow, state, and version control all hit walls fast.
 
-### 第 1 版：RAG + 規則引擎
+### 第 1 版：RAG
 
-想自己做就先試 **RAG**：把客服文件切 chunk、做 embedding、查最相近的段落回給使用者。問題：
-- Q&A 是「結構化」的——同樣的 topic 配不同的 action 會有完全不同的答案，相似度比對抓不到這種邏輯
-- 回答品質飄忽，不確定下一次同樣的問題會不會給同樣的答案
+- 把客服文件切 chunk、做 embedding、找相近段落回答
+- 撞牆點：客服 Q&A 是「結構化」的—— 同樣 topic 配不同 action 答案完全不同（升級 vs 取消方案），相似度比對不出這種邏輯；回答品質飄忽
 
-於是改成**類專家系統**：把 Q&A 預先標 tag，使用者問題解析成 tag set，做集合交集找答案。這個版本工作了，但每次新增 Q 都要手動補 tag，dictionary 也越來越亂。
+Switched to RAG. Wrong fit for structured Q&A where intent dimensions matter as much as topic.
 
-Switched from RAG to a tag-based expert system. Each QA gets dimension tags, user input is parsed to a tag set, and the answer is whichever QA's tag set is a superset of the input. Cleaner than RAG for structured Q&A, but the tagging burden grew fast.
+### 第 2 版：類專家系統（規則 + tag set）
 
-### 第 2 版（現在）：決策樹 + no-code 後台
+- 每筆 Q&A 預先標 dimension tag，使用者輸入解析成 tag set，做集合交集找答案
+- 撞牆點：每新增 Q 都要手動補 tag，admin 看不懂 JSON
 
-最後的設計：
+A tag-based expert system. Better than RAG for structured Q&A, but tagging became a maintenance burden and admins couldn't read the JSON.
 
-- 維度（C / T / A）用**單字母 prefix** 表示，從 ID 字串本身就能知道是哪個維度
-- **`ask_order`** 列出系統會主動追問的順序；**`condition`** 用一個物件（`{"C": ["C02", "C04"]}`）表示「只有當 C 維度是 C02 或 C04 時才追問」——這讓追問邏輯變成資料而不是程式
-- 沒被命中的維度自動丟出快速回覆按鈕讓使用者點
-- 答案的 `tags` 用反向索引預先建好，查詢時是 O(tags) 而不是 O(QA)
+### 第 3 版（現在）：決策樹 + visual editor + no-code 後台
 
-這個版本最大的好處：**新增 Q&A 不用改 Python 程式碼**，只要動 `Knowledge/*.json`。我也順便做了個 `/admin/messages` 頁面讓真人客服在瀏覽器裡處理工單。
+| 層 / Layer | 模組 / Module | 職責 / Responsibility |
+|---|---|---|
+| Data | `menu_engine.py` | 樹節點 load/save/lookup，與 Flask/LINE 解耦 |
+| Data | `templates_engine.py` | 可重複使用的回覆「公版」CRUD |
+| Data | `db.py` | SQLite（sessions / messages）|
+| Service | `messages.py` | 留言查詢 + 統計（route 變薄殼）|
+| Integration | `line_bot.py` | LINE webhook → menu_engine |
+| Domain | `chatbot/handler.py` | 樹狀導航狀態機（web 模擬器用）|
+| API | `app.py` | Flask routes，只負責 HTTP 殼 |
+| UI | `templates/editor.html` + `static/editor/` | 視覺化編輯器（樹清單 + d3.js 樹狀圖 + 公版管理）|
+| UI | `templates/index.html` + `static/viewer.js` | LINE 風格手機殼 |
 
-The final design encodes dimensions as ID prefixes (`C01` → category, `A01` → action), uses an `ask_order` + `condition` data structure to drive clarifying questions, and indexes QAs by tag for O(tags) lookup. Adding new Q&A means editing JSON only — no Python changes.
+關鍵設計 / Key design choices:
+
+- `label` 只是顯示文字，admin 改名不影響程式；行為由 `action` 欄位決定（`collect_message` / `call_phone`）。`label` is display-only — admins rename freely without breaking code; behavior is gated by an explicit `action` field
+- 新 action 三步走：`menu_engine.VALID_ACTIONS` 註冊 → `line_bot.ACTION_HANDLERS` 補 handler → 編輯器下拉自動透過 `/api/actions` 出現。Adding a new action is a 3-step contract across data / integration / UI
+- 公版（templates）與選單分離：節點建立時可一鍵套用公版內容再微調。Reusable reply templates are stored separately so admins don't copy-paste
+- 檔案存 JSON 而非 DB：menu 與 templates 是「設定」不是「資料」，git diff 可讀，admin 也能直接編輯
 
 ### 1. 研究階段 / Research
 
-- 比較了 RAG、規則引擎、決策樹三條路；對小型結構化客服情境，**規則引擎勝**
-- 讀了一些 chatbot 設計參考，理解 slot-filling / disambiguation 的概念
-- 找到「反向索引」這個資料結構解掉了「QA 太多查不動」的擔憂（其實實際也沒幾筆，但結構正確）
-- SQL：學了關聯式 SQLite（這個專案用），也試過 NoSQL（pickle / json file storage）—— 最後選 SQLite 因為它支援 transactional UPSERT 而且零部署成本
-- 部署：GCP Compute Engine 起 VM、申請靜態 IP、Cloud DNS 接域名、HTTPS 用 Caddy，這些都是這個專案邊做邊學的
+- 比較了 RAG、規則引擎、決策樹三條路；對結構化客服情境，**決策樹勝**
+- 讀了 LINE Messaging API webhook / Quick Reply / Postback 的限制（13 顆 button、20 字 label）
+- 學 d3.js 怎麼畫樹狀圖（樹狀預覽分頁）
+- GCP Compute Engine、Docker、靜態網域、HTTPS 部署都是這個專案邊做邊補的
+- SQL：用 SQLite（關聯式）做 sessions 與 messages 兩張表；對照之前試過 pickle / JSON file storage（NoSQL 風格），這次選 SQLite 是因為支援 transactional UPSERT 而且容器掛 volume 很簡單
 
 ### 2. 框架階段 / Scaffolding
 
-- 三檔分工：`app.py` 只處理 HTTP + LINE callback，`matcher.py` 純邏輯不碰 DB，`db.py` 只負責 SQLite。這個分層是後來才重構出來的，原本全部塞在 `app.py`
-- DB 設計：`sessions`（活躍對話、結束就刪）、`conversations`（永久歸檔）、`messages`（真人客服工單）三張表，職責很清楚（細節在 [docs-architecture.md](docs-architecture.md)）
-- LINE 用 SQLite 持久化 session（reconnect 後對話不丟）；Web 用記憶體 session 省 I/O，但結果都會寫 `conversations`
+從一個檔案塞所有東西的雛形，重構成「資料層 / 服務層 / 介接層 / API 殼 / UI」五段。每段有明確的依賴方向（UI → API → service → data，不可逆）。
+
+Refactored from a single-file prototype into a 5-layer split with strict dependency direction.
 
 ### 3. AI 迭代階段 / AI-assisted iteration
 
-- 整套規則引擎的核心 ~150 行（`matcher.py` 的 `compute_pending_dims` / `viable_options` / `detect_conflict`）是和 AI 對話逐步打磨出來的
-- 我畫好資料流（在 docs-architecture.md 有圖），AI 負責對應實作；改 bug 時 AI 也幫我加 test case
-- 後台 HTML（`/admin/messages` 那頁的 Tailwind + filter tab）幾乎是 AI 一鍵生成的，我做的是定 spec：「待處理 / 已處理 / 全部三個 tab，日期切點 08:30」
+- 樹狀資料結構、路徑導航狀態機、編輯器的拖拉與儲存流程，都是把資料形狀和介面定義講清楚後跟 AI 協作完成的
+- 我畫流程圖、AI 補實作；改 bug 時 AI 幫忙找邊界條件（空樹、單一節點、超過 13 個子節點、label 超過 20 字）
+- d3.js 樹狀圖視覺化完全靠 AI 寫，但事前定好「點節點要 emit 什麼事件、編輯器要怎麼接」這個 contract
 
-學到的事：**先講清楚資料的形狀和流向，AI 才能寫出正確的程式**。我每次卡住，回頭看都是因為當下沒想清楚「這份資料是誰寫的、誰讀的、生命週期多久」。
+學到的事：**先把「資料 → 行為」的對應講清楚，AI 才能寫出穩的程式**。
 
-Lesson: AI works much better once you've decided **the shape of the data and its lifecycle**. Every time I got stuck, it was because I hadn't pinned down who writes, who reads, and how long each piece of state lives.
+Lesson: nail down the data-to-behavior contract first, then AI can fill in the implementation reliably.
 
 ---
 
-## 跑起來 / How to run
+## 啟動：用 Docker / Quick start with Docker
+
+需要先裝 Docker Desktop (Windows / Mac) 或 Docker Engine (Linux)。
 
 ```bash
-# 1. 安裝依賴
-pip install -r requirements.txt
-
-# 2. 設定 LINE 憑證
-cp .env.example .env
-# 編輯 .env，填入 LINE Channel Secret / Access Token
-
-# 3. 跑起來
-python app.py
-# Flask runs on http://0.0.0.0:5000
+docker compose up -d --build
+# Open http://localhost:5000/
 ```
 
-需要把 `/callback` 設成 LINE Developers Console 的 Webhook URL（要 HTTPS — 開發時用 ngrok 或 Cloudflare Tunnel）。
+**日常操作 / Day-to-day:**
 
-Set the LINE Webhook URL to `https://your-domain/callback` (HTTPS required — use ngrok or Cloudflare Tunnel during development).
+```bash
+docker compose logs -f       # tail logs
+docker compose stop          # pause (data preserved)
+docker compose start         # resume
+docker compose down          # remove container (data preserved on host)
+docker compose up -d --build # rebuild after Python changes
+```
 
-### Web chat
+不用 Docker 的話：
 
-開瀏覽器到 `http://localhost:5000/` — 用同一份知識庫，但不需要 LINE 帳號就能測。
-
-Open `http://localhost:5000/` in the browser for a simple web chat against the same knowledge base.
-
-### Admin
-
-`http://localhost:5000/admin/messages` — 看真人客服 inbox（沒做認證，production 請加上 reverse proxy + auth）。
-
-The admin inbox at `/admin/messages` has no built-in auth — put it behind a reverse proxy with authentication for production.
+```bash
+pip install -r requirements.txt
+python app.py
+```
 
 ---
 
-## 後續可以做的事 / Next steps
+## 體驗流程 / Demo flow
 
-- Admin 後台加認證
-- 規則引擎支援更複雜的 condition（OR / NOT / 巢狀）
-- Knowledge JSON 加 schema validation，避免新增資料時打錯結構
-- 把 LINE callback 改成異步處理（目前同步回應在尖峰可能會卡）
+1. 進 <http://localhost:5000/> ，看到 LINE 風格手機殼裡只有一筆官方帳號「**Demo Customer Service**」
+2. **點客服列** → 對話畫面從右滑入
+3. **打字送出** → 主選單泡泡冒出來，內含 Account / Billing / Subscription / Other 四個分類
+4. **點任一個按鈕** → 該泡泡按鈕變灰、自己的訊息冒出來、下方來一顆新的子選單泡泡
+5. 走到底層：
+   - 有設定文字的節點 → 顯示內容
+   - `call_phone` 動作 → 顯示電話 + 撥打按鈕（`tel:` URI）
+   - `collect_message` 動作 → 進留言模式，下一句話會存進 SQLite
+6. 對話標頭：左上 ‹ 滑回聊天列表
+7. 底部「+」按鈕模擬 LINE 的附件選單 — bot 會擋掉並提示要打字
+8. 底部「重新開始聊天」清空對話、回到聊天列表
+
+---
+
+## 怎麼改對話內容 / How to edit content
+
+到 <http://localhost:5000/editor>：
+
+- **編輯分頁**：左邊樹狀清單，點任一節點 → 右邊改 label / description / text / action / phone，按「儲存」寫回 `menu.json`
+- **樹狀圖預覽**：把整棵選單樹畫成圖（d3.js），拖曳平移、滾輪縮放，點節點跳回編輯
+- **公版管理**：建立可重複使用的回覆內容，多個節點可套用同一份公版
+
+存檔後切回 `/` 對話模擬器會自動拉新版。
+
+The editor writes JSON files (`menu.json`, `templates.json`) directly — git diff stays readable.
+
+---
+
+## 留言管理 / Human-agent inbox
+
+走 `collect_message` 節點留下的訊息會存進 `Chat History/session.db` (SQLite)。
+
+到 <http://localhost:5000/admin/messages>：
+
+- 用 **待處理 / 已處理 / 全部** 分頁過濾
+- 用 **日期區間** 查詢（以 08:30 為日切，台北時區）
+- **標記已處理** ↔ 取消標記
+- **刪除留言**（兩段防誤刪）：先解鎖 🔒 → 🔓，再點 🗑️，最後 modal 確認
+
+---
+
+## 接上真正的 LINE Bot / Connect to real LINE
+
+複製 `.env.example` 為 `.env`，填入 LINE Developers Console 拿到的兩個值：
+
+```
+LINE_CHANNEL_SECRET=...
+LINE_CHANNEL_ACCESS_TOKEN=...
+```
+
+重啟 docker，然後用 ngrok / Cloudflare Tunnel 把 `localhost:5000` 暴露到公網 HTTPS：
+
+```bash
+ngrok http 5000
+```
+
+把 ngrok 給的網址 + `/callback` 設到 LINE Developers Console 的 webhook URL 即可。LINE 真機與網頁模擬器的留言都會在同一份 SQLite。
+
+---
+
+## 專案結構 / Repo layout
+
+```
+.
+├── Dockerfile / docker-compose.yml / .dockerignore
+├── DOCKER.md / COMPLIANCE.md
+│
+├── app.py                     ← Flask routes
+├── line_bot.py                ← LINE webhook (only when connected to real LINE)
+├── menu_engine.py             ← tree data layer
+├── templates_engine.py        ← reply-template data layer
+├── messages.py                ← message service layer
+├── messages_constants.py      ← shared strings & LINE limits
+├── time_utils.py              ← TW timezone helpers
+├── db.py                      ← SQLite
+│
+├── chatbot/                   ← decision-tree handler (web simulator)
+│   ├── handler.py
+│   ├── menu.json
+│   └── templates.json
+│
+├── menu.json                  ← decision tree (editor writes back here)
+├── templates.json             ← reusable reply templates
+├── .env.example
+├── requirements.txt
+│
+├── templates/
+│   ├── index.html             ← phone shell (chat list + chat view)
+│   ├── editor.html            ← visual tree editor
+│   └── admin_messages.html    ← inbox
+│
+├── static/
+│   ├── css/style.css
+│   ├── js/chat.js             ← phone-shell interaction
+│   ├── viewer.js              ← bot conversation logic
+│   ├── menu-utils.js          ← tree helpers
+│   ├── editor.css / editor/   ← editor assets (d3 tree viz, list, form)
+│   └── img/rich-menu.jpg
+│
+└── Chat History/              ← runtime SQLite (auto-created)
+```
+
+---
+
+## 常見問題 / FAQ
+
+**Q: 啟動後瀏覽器空白 / 連不上**
+A: `docker compose ps` 看容器是不是 `Up`。`Restarting` 的話跑 `docker compose logs -f`。最常見是 port 5000 被占用，把 `docker-compose.yml` 的 `"5000:5000"` 改成 `"5001:5000"`。
+
+**Q: 編輯器存了但模擬器沒更新**
+A: 切到 `/` 分頁時 `viewer.js` 會自動拉新 menu。如果一直在同一頁，按底部「重新開始聊天」或 Ctrl+F5。
+
+**Q: 改了 HTML / CSS / JS 容器要重建嗎？**
+A: 不用。Ctrl+F5 就拿到新版。只有改 Python 才需要 `docker compose up -d --build`。
+
+**Q: SQLite `database disk image is malformed`**
+A: 刪掉 `Chat History/session.db`，下次啟動會自動建空檔（舊留言會丟）。
+
+---
+
+## 用到的技術 / Tech stack
+
+- **Backend**: Python 3.11 + Flask + gunicorn
+- **DB**: SQLite
+- **LINE**: line-bot-sdk-python v3
+- **Frontend**: vanilla HTML/CSS/JS (no build step)
+- **Tree viz**: D3.js v7 (CDN)
+- **Container**: Docker + docker-compose
 
 ---
 

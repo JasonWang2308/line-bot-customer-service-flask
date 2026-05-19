@@ -1,0 +1,22 @@
+{
+  "templates": [
+    {
+      "id": "video_tutorial",
+      "name": "Video tutorial",
+      "description": "Reply that points the user to a tutorial video.",
+      "text": "Step-by-step video:\nhttps://www.youtube.com/watch?v=XXXXX\n\nStill stuck? Use Other > Leave a message to reach a human."
+    },
+    {
+      "id": "step_by_step",
+      "name": "Step-by-step",
+      "description": "Numbered instructions.",
+      "text": "Steps:\n1. Sign in\n2. Go to ____\n3. Upload your file\n4. Confirm\n\nIf anything goes wrong, use Other > Leave a message."
+    },
+    {
+      "id": "contact_info",
+      "name": "Contact information",
+      "description": "Plain-text contact info (phone / email / hours).",
+      "text": "If you need help, contact us:\nPhone: 02-XXXXXXXX\nEmail: support@example.com\nHours: Mon-Fri 09:00-18:00"
+    }
+  ]
+}

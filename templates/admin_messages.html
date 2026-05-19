@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>客服留言管理</title>
+<style>
+:root {
+  --primary: #1a73e8;
+  --primary-dark: #1557b0;
+  --primary-soft: #f0f6ff;
+  --accent: #ff8a65;
+  --accent-dark: #ff7043;
+  --mint: #14b8a6;
+  --bg: #f7f9fc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --border-soft: #f1f5f9;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-soft: #94a3b8;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --radius: 10px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+/* Header */
+.page-header {
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfd 100%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+  position: relative;
+  padding: 24px 32px;
+}
+.page-header::before {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--mint) 50%, var(--accent) 100%);
+  opacity: 0.7;
+}
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.page-title { font-size: 22px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+.page-title-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary) 0%, #4285f4 100%);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: white; font-size: 18px;
+  box-shadow: 0 2px 8px rgba(26,115,232,0.3);
+}
+.nav-links { display: flex; gap: 8px; }
+.nav-link {
+  padding: 7px 14px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white; color: var(--primary);
+  text-decoration: none; font-size: 13px; font-weight: 500;
+  transition: all var(--transition);
+}
+.nav-link:hover { background: var(--primary-soft); border-color: var(--primary); }
+/* Container */
+.container { max-width: 1280px; margin: 0 auto; padding: 28px 32px; }
+/* Stats cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(15,23,42,0.08); }
+.stat-card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+}
+.stat-card.pending::before { background: var(--accent); }
+.stat-card.done::before { background: var(--mint); }
+.stat-card.total::before { background: var(--primary); }
+.stat-label {
+  font-size: 12px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.stat-dot { width: 8px; height: 8px; border-radius: 50%; }
+.stat-card.pending .stat-dot { background: var(--accent); box-shadow: 0 0 6px rgba(255,138,101,0.6); }
+.stat-card.done .stat-dot { background: var(--mint); box-shadow: 0 0 6px rgba(20,184,166,0.6); }
+.stat-card.total .stat-dot { background: var(--primary); box-shadow: 0 0 6px rgba(26,115,232,0.6); }
+.stat-value { font-size: 32px; font-weight: 700; color: var(--text); margin-top: 8px; line-height: 1; }
+/* Toolbar */
+.toolbar {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  margin-bottom: 18px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+.tabs { display: flex; gap: 4px; background: var(--border-soft); padding: 4px; border-radius: 8px; }
+.tab { padding: 7px 16px; border: none; background: transparent; cursor: pointer; font-size: 13px; font-weight: 500; border-radius: 6px; font-family: inherit; color: var(--text-muted); transition: all var(--transition); }
+.tab:hover { color: var(--primary); }
+.tab.active { background: white; color: var(--primary); font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,0.06); }
+.date-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.date-filter label { font-size: 13px; color: var(--text-muted); }
+.date-filter input[type="date"] {
+  border: 1.5px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; font-size: 13px; font-family: inherit; color: var(--text);
+  transition: all var(--transition);
+}
+.date-filter input[type="date"]:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.15); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #4285f4 100%);
+  color: white; border: none; border-radius: 6px;
+  padding: 7px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: inherit; transition: all var(--transition);
+  box-shadow: 0 1px 3px rgba(26,115,232,0.3);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(26,115,232,0.4); }
+.btn-link { font-size: 13px; color: var(--primary); text-decoration: none; padding: 6px 0; }
+.btn-link:hover { text-decoration: underline; }
+/* Message cards */
+.message-list { display: flex; flex-direction: column; gap: 12px; }
+.msg-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+  transition: all var(--transition);
+  display: grid;
+  grid-template-columns: 200px 1fr auto;
+  gap: 18px;
+  align-items: start;
+}
+.msg-card:hover { box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+.msg-card.is-handled { opacity: 0.65; }
+.msg-meta { display: flex; flex-direction: column; gap: 4px; }
+.msg-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.msg-time { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 4px; }
+.msg-uid { font-size: 11px; color: var(--text-soft); font-family: ui-monospace, "Consolas", monospace; word-break: break-all; }
+.msg-content { font-size: 14px; line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.msg-action { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+  white-space: nowrap;
+}
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+.badge.pending { background: #fff7ed; color: var(--accent-dark); }
+.badge.pending .badge-dot { background: var(--accent); animation: pulse 2s infinite; }
+.badge.done { background: #ecfdf5; color: var(--success); }
+.badge.done .badge-dot { background: var(--success); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.btn-action {
+  padding: 7px 14px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 500; cursor: pointer;
+  font-family: inherit; transition: all var(--transition);
+}
+.btn-handle {
+  background: linear-gradient(135deg, var(--mint) 0%, #2dd4bf 100%);
+  color: white; border: none;
+  box-shadow: 0 2px 6px rgba(20,184,166,0.3);
+}
+.btn-handle:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(20,184,166,0.4); }
+.btn-undo { background: white; border: 1px solid var(--border); color: var(--text-muted); }
+.btn-undo:hover { border-color: var(--text-muted); color: var(--text); }
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 80px 20px;
+  background: var(--card); border-radius: var(--radius);
+  border: 1px dashed var(--border);
+}
+.empty-icon { font-size: 48px; opacity: 0.3; margin-bottom: 12px; }
+.empty-text { font-size: 15px; color: var(--text-muted); }
+/* Responsive */
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .msg-card { grid-template-columns: 1fr; gap: 12px; }
+  .msg-action { align-items: flex-start; flex-direction: row; }
+}
+
+
+/* ── 模擬器追加：鎖定 / 刪除 / 二重確認 modal ── */
+.btn-action.btn-lock {
+  background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+  padding: 6px 10px; border-radius: 8px; font-size: 12px;
+  cursor: pointer; font-family: inherit;
+  transition: 0.15s;
+}
+.btn-action.btn-lock:hover { background: #e2e8f0; }
+.btn-action.btn-lock.is-unlocked {
+  background: #fff7ed; color: #c2410c; border-color: #fed7aa;
+}
+.btn-action.btn-lock.is-unlocked:hover { background: #ffedd5; }
+
+.btn-action.btn-delete {
+  background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;
+  padding: 6px 10px; border-radius: 8px; font-size: 12px;
+  cursor: pointer; font-family: inherit;
+  transition: 0.15s;
+}
+.btn-action.btn-delete:hover:not(:disabled) { background: #fecaca; }
+.btn-action.btn-delete:disabled {
+  background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0;
+  cursor: not-allowed; opacity: 0.7;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  animation: modalFade 0.15s ease;
+}
+.modal-overlay[hidden] { display: none; }
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  max-width: 360px; width: calc(100% - 40px);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  animation: modalPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modalPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.modal-title {
+  font-size: 17px; font-weight: 700; color: #0f172a;
+  margin-bottom: 8px;
+}
+.modal-content {
+  font-size: 14px; color: #475569;
+  line-height: 1.5; margin-bottom: 18px;
+}
+.modal-content .quote {
+  display: block;
+  margin-top: 8px; padding: 8px 12px;
+  background: #f8fafc; border-left: 3px solid #cbd5e1;
+  border-radius: 4px; color: #334155;
+  font-size: 13px; word-break: break-word;
+  max-height: 80px; overflow: auto;
+}
+.modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+}
+.btn-modal {
+  padding: 9px 22px; border-radius: 8px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+  border: 1px solid transparent;
+  transition: 0.15s;
+}
+.btn-modal-no {
+  background: #f1f5f9; color: #475569; border-color: #cbd5e1;
+}
+.btn-modal-no:hover { background: #e2e8f0; }
+.btn-modal-yes {
+  background: #ef4444; color: #fff; border-color: #dc2626;
+}
+.btn-modal-yes:hover { background: #dc2626; }
+
+</style>
+</head>
+<body>
+<header class="page-header">
+  <div class="page-header-row">
+    <div class="page-title">
+      <span class="page-title-icon">📋</span>
+      客服留言管理
+    </div>
+    <div class="nav-links">
+      <a href="/editor" class="nav-link">📝 選單編輯器</a>
+    </div>
+  </div>
+</header>
+<div class="container">
+  <div class="stats-grid">
+    <div class="stat-card pending">
+      <div class="stat-label"><span class="stat-dot"></span>待處理</div>
+      <div class="stat-value">{{ pending_count }}</div>
+    </div>
+    <div class="stat-card done">
+      <div class="stat-label"><span class="stat-dot"></span>已處理</div>
+      <div class="stat-value">{{ handled_count }}</div>
+    </div>
+    <div class="stat-card total">
+      <div class="stat-label"><span class="stat-dot"></span>本批次總計</div>
+      <div class="stat-value">{{ total_count }}</div>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="tab active" onclick="filterRows(0, this)">待處理</button>
+      <button class="tab" onclick="filterRows(1, this)">已處理</button>
+      <button class="tab" onclick="filterRows(null, this)">全部</button>
+    </div>
+    <form method="get" class="date-filter">
+      <label>📅 日期區間</label>
+      <input type="date" name="start" value="{{ q_start }}">
+      <span style="color:var(--text-soft);font-size:13px">~</span>
+      <input type="date" name="end" value="{{ q_end }}">
+      <button type="submit" class="btn-primary">查詢</button>
+      <a href="/admin/messages" class="btn-link">回今日</a>
+    </form>
+  </div>
+  <div class="message-list" id="msg-list">
+  {% for m in messages %}
+    <div class="msg-card {{ 'is-handled' if m.handled else '' }}" data-handled="{{ 1 if m.handled else 0 }}" id="row-{{ m.id }}">
+      <div class="msg-meta">
+        <div class="msg-name">{{ m.display_name }}</div>
+        <div class="msg-time">🕒 {{ m.created_at_tw }}</div>
+        <div class="msg-uid" title="{{ m.user_id }}">{{ m.user_id[:24] }}{% if m.user_id|length > 24 %}…{% endif %}</div>
+      </div>
+      <div class="msg-content">{{ m.content }}</div>
+      <div class="msg-action">
+        {% if m.handled %}
+          <span class="badge done"><span class="badge-dot"></span>已處理</span>
+          <button class="btn-action btn-undo" onclick="toggle({{ m.id }}, 0)">取消標記</button>
+        {% else %}
+          <span class="badge pending"><span class="badge-dot"></span>待處理</span>
+          <button class="btn-action btn-handle" onclick="toggle({{ m.id }}, 1)">標記已處理</button>
+        {% endif %}
+        <button class="btn-action btn-lock" onclick="toggleLock({{ m.id }}, this)" title="解鎖才能刪除">🔒 已鎖定</button>
+        <button class="btn-action btn-delete" data-id="{{ m.id }}" onclick="requestDelete({{ m.id }})" disabled>🗑️ 刪除</button>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">📭</div>
+      <div class="empty-text">此批次沒有留言</div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+
+<!-- 刪除二重確認 Modal -->
+<div id="delete-modal" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div id="delete-modal-title" class="modal-title">確定要刪除嗎？</div>
+    <div class="modal-content">
+      這則留言將被永久刪除，無法復原。
+      <span class="quote" id="delete-modal-quote"></span>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-modal btn-modal-no" onclick="cancelDelete()">否</button>
+      <button type="button" class="btn-modal btn-modal-yes" onclick="confirmDelete()">是</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function filterRows(val, btn) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  btn.classList.add("active");
+  document.querySelectorAll(".msg-card").forEach(card => {
+    const isHandled = card.dataset.handled === "1";
+    if (val === null) card.style.display = "";
+    else if (val === 0) card.style.display = isHandled ? "none" : "";
+    else card.style.display = isHandled ? "" : "none";
+  });
+}
+async function toggle(id, handled) {
+  await fetch(`/admin/messages/${id}/handle`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ handled }),
+  });
+  location.reload();
+}
+
+let _pendingDeleteId = null;
+function toggleLock(id, btn) {
+  const card = document.getElementById("row-" + id);
+  if (!card) return;
+  const deleteBtn = card.querySelector(".btn-delete");
+  const isUnlocked = btn.classList.toggle("is-unlocked");
+  btn.textContent = isUnlocked ? "🔓 已解鎖" : "🔒 已鎖定";
+  if (deleteBtn) deleteBtn.disabled = !isUnlocked;
+}
+function requestDelete(id) {
+  _pendingDeleteId = id;
+  const card = document.getElementById("row-" + id);
+  const quote = document.getElementById("delete-modal-quote");
+  if (card && quote) {
+    const c = card.querySelector(".msg-content");
+    quote.textContent = c ? c.textContent.trim().slice(0, 200) : "";
+  }
+  document.getElementById("delete-modal").hidden = false;
+}
+function cancelDelete() {
+  _pendingDeleteId = null;
+  document.getElementById("delete-modal").hidden = true;
+}
+async function confirmDelete() {
+  const id = _pendingDeleteId;
+  if (!id) return;
+  try {
+    const res = await fetch("/admin/messages/" + id, { method: "DELETE" });
+    if (res.ok) {
+      const card = document.getElementById("row-" + id);
+      if (card) card.remove();
+    }
+  } catch (e) { console.warn("delete failed", e); }
+  document.getElementById("delete-modal").hidden = true;
+  _pendingDeleteId = null;
+}
+// ESC 鍵關閉 modal
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("delete-modal").hidden) {
+    cancelDelete();
+  }
+});
+
+// 預設顯示「待處理」
+document.addEventListener("DOMContentLoaded", () => {
+  filterRows(0, document.querySelector(".tab.active"));
+});
+</script>
+</body>
+</html>

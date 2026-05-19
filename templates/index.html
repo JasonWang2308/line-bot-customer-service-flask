@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LINE Bot 模擬器 — {{ chat_title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <div class="page">
+
+    <header class="sim-header">
+      <div class="sim-title">LINE Bot 本地模擬器</div>
+      <div class="sim-subtitle">
+        點擊聊天列表的「{{ chat_title }}」進入對話。管理員工具：
+        <a href="/editor" target="_blank">選單編輯器</a> ・
+        <a href="/admin/messages" target="_blank">留言管理</a>
+      </div>
+    </header>
+
+    <div class="phone">
+      <span class="phone-side phone-side-power" aria-hidden="true"></span>
+      <span class="phone-side phone-side-vol1" aria-hidden="true"></span>
+      <span class="phone-side phone-side-vol2" aria-hidden="true"></span>
+      <span class="phone-side phone-side-mute" aria-hidden="true"></span>
+      <div class="phone-notch"></div>
+
+      <div id="phoneScreen" class="phone-screen" data-view="list">
+
+        <!-- 狀態列（時間由 chat.js 動態更新） -->
+        <div class="status-bar">
+          <span class="sb-time" id="sbTime">--:--</span>
+          <span class="sb-icons" aria-hidden="true">
+            <span class="sb-signal">📶</span>
+            <span class="sb-wifi" title="Wi-Fi">
+              <svg viewBox="0 0 24 18" width="16" height="13" aria-hidden="true">
+                <path fill="currentColor" d="M12 16.5a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8z"/>
+                <path fill="currentColor" d="M5.6 9.9l1.8 2.1A7.3 7.3 0 0 1 12 10.4c1.85 0 3.55.69 4.85 1.83l1.55-1.85A9.6 9.6 0 0 0 12 8a9.6 9.6 0 0 0-6.4 1.9z" opacity="0.95"/>
+                <path fill="currentColor" d="M1 5.5l1.85 2.15A12.5 12.5 0 0 1 12 4.5c3.45 0 6.6 1.25 8.95 3.3L22.8 5.5A14.65 14.65 0 0 0 12 1 14.65 14.65 0 0 0 1 5.5z" opacity="0.85"/>
+              </svg>
+            </span>
+            <span class="sb-battery">🔋</span>
+          </span>
+        </div>
+
+        <!-- VIEW 1: 聊天列表 -->
+        <section class="view view-list" aria-label="聊天列表">
+          <header class="list-header">
+            <div class="list-title">聊天</div>
+            <div class="list-actions">
+              <span class="icon-btn" aria-hidden="true">⌕</span>
+              <span class="icon-btn" aria-hidden="true">＋</span>
+            </div>
+          </header>
+
+          <div class="search-bar"><input type="text" placeholder="搜尋聊天" disabled /></div>
+
+          <div class="chat-list">
+            <button class="chat-row" id="enterChatBtn" type="button">
+              <span class="row-avatar" style="background:#06c755;">客</span>
+              <span class="row-body">
+                <span class="row-line1">
+                  <span class="row-name">
+                    {{ chat_title }}
+                    <span class="badge-official" title="官方帳號">✓</span>
+                  </span>
+                  <span class="row-time">現在</span>
+                </span>
+                <span class="row-line2">
+                  <span class="row-preview">
+                    {% if bot_description %}{{ bot_description }}{% else %}您好，歡迎使用Customer Service Bot 👋{% endif %}
+                  </span>
+                  <span class="row-unread">1</span>
+                </span>
+              </span>
+            </button>
+          </div>
+
+          <nav class="tabbar" aria-label="底部分頁">
+            <button class="tab" data-tab="home">主頁</button>
+            <button class="tab is-on" data-tab="chat">聊天</button>
+            <button class="tab" data-tab="voom">VOOM</button>
+            <button class="tab" data-tab="news">服務</button>
+            <button class="tab" data-tab="wallet">錢包</button>
+          </nav>
+        </section>
+
+        <!-- VIEW 2: 對話畫面 -->
+        <section class="view view-chat" aria-label="對話">
+          <header class="chat-header">
+            <button id="backBtn" class="icon-btn" aria-label="返回">‹</button>
+            <div class="avatar">客</div>
+            <div class="chat-header-info">
+              <div class="title">{{ chat_title }}</div>
+              <div class="bot-status">已驗證官方帳號</div>
+            </div>
+            <button id="reset-btn" hidden aria-hidden="true"></button>
+            <button class="icon-btn" aria-label="通話" title="通話">📞</button>
+          </header>
+
+          <main id="chat-log" class="chat-log" aria-live="polite"></main>
+
+          <!-- LINE Rich Menu：永遠顯示在輸入列上方 -->
+          <button type="button" id="richMenu" class="rich-menu" aria-label="開啟主選單">
+            <img src="{{ url_for('static', filename='img/rich-menu.jpg') }}" alt="主選單" />
+          </button>
+
+          <footer class="chat-footer">
+            <div class="input-row">
+              <button type="button" id="plusBtn" class="plus-btn" aria-label="附加">＋</button>
+              <button type="button" id="menuToggleBtn" class="menu-toggle-btn is-on" aria-label="切換主選單" title="顯示 / 隱藏主選單">
+                <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true">
+                  <rect fill="currentColor" x="1" y="1" width="6" height="6" rx="1"/>
+                  <rect fill="currentColor" x="9" y="1" width="6" height="6" rx="1"/>
+                  <rect fill="currentColor" x="1" y="9" width="6" height="6" rx="1"/>
+                  <rect fill="currentColor" x="9" y="9" width="6" height="6" rx="1"/>
+                </svg>
+              </button>
+              <input id="msg-input" type="text" placeholder="輸入訊息" autocomplete="off" />
+              <button type="button" id="send-btn" class="send-btn" aria-label="送出">➤</button>
+            </div>
+
+            <div id="plusMenu" class="plus-menu" hidden>
+              <button type="button" class="upload-btn" data-type="sticker">
+                <span class="upload-emoji">🎟️</span><span>貼圖</span>
+              </button>
+              <button type="button" class="upload-btn" data-type="image">
+                <span class="upload-emoji">🖼️</span><span>圖片</span>
+              </button>
+              <button type="button" class="upload-btn" data-type="video">
+                <span class="upload-emoji">🎬</span><span>影片</span>
+              </button>
+              <button type="button" class="upload-btn" data-type="audio">
+                <span class="upload-emoji">🎤</span><span>聲音</span>
+              </button>
+            </div>
+          </footer>
+        </section>
+
+      </div>
+    </div>
+
+    <footer class="sim-footer">
+      <button type="button" id="restartChatBtn" class="text-btn">重新開始聊天</button>
+    </footer>
+
+  </div>
+
+  <script>window.APP_CONSTANTS = {{ constants | tojson }};</script>
+  <script src="{{ url_for('static', filename='menu-utils.js') }}"></script>
+  <script src="{{ url_for('static', filename='viewer.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>

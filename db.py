@@ -1,9 +1,42 @@
-import sqlite3
+"""
+db — SQLite 持久化（資料層）
+
+定位:
+    集中所有 SQLite 讀寫，提供 LINE Bot 的會話狀態與真人客服留言。
+    本模組不耦合 Flask / LINE / menu_engine，可獨立測試。
+
+資料表:
+    sessions  — 每位 LINE 使用者目前在決策樹的路徑與狀態
+                user_id      TEXT PK
+                current_path TEXT (JSON list[int])
+                state        TEXT ('idle' | 'awaiting_message')
+                created_at   TEXT (UTC ISO8601)
+                updated_at   TEXT (UTC ISO8601)
+    messages  — 真人客服留言（與舊程式 schema 完全相容）
+                id           INTEGER PK
+                user_id      TEXT
+                display_name TEXT
+                content      TEXT
+                handled      INTEGER (0|1)
+                created_at   TEXT (UTC ISO8601)
+
+包含單元 (units):
+    init_db                         建表（若不存在）
+    get_session / save_session      session 讀 / 寫（upsert）
+    reset_session                   清除指定使用者 session
+    save_message / get_messages     留言寫 / 查（支援日期區間與已處理狀態過濾）
+    mark_handled                    標記留言處理狀態
+    is_expired                      判斷 session 是否逾時（給逾時重置用）
+"""
+
 import json
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = str(Path(__file__).parent / "Chat History" / "session.db")
+DB_DIR = Path(__file__).parent / "Chat History"
+DB_DIR.mkdir(exist_ok=True)
+DB_PATH = str(DB_DIR / "session.db")
 
 
 def get_conn():
@@ -17,27 +50,10 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 user_id      TEXT PRIMARY KEY,
+                current_path TEXT    DEFAULT '[]',
                 state        TEXT    DEFAULT 'idle',
-                resolved_ids TEXT    DEFAULT '[]',
-                pending_dims TEXT    DEFAULT '[]',
-                current_dim  TEXT,
-                raw_input    TEXT,
-                turn_count   INTEGER DEFAULT 0,
                 created_at   TEXT,
                 updated_at   TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id      TEXT,
-                raw_input    TEXT,
-                resolved_ids TEXT,
-                status       TEXT,
-                qa_id        TEXT,
-                turn_count   INTEGER,
-                created_at   TEXT,
-                ended_at     TEXT
             )
         """)
         conn.execute("""
@@ -53,7 +69,26 @@ def init_db():
         conn.commit()
 
 
-# ── 讀取 ──────────────────────────────────────────────
+# ── Session ───────────────────────────────────────────────
+
+def _default_session(user_id: str) -> dict:
+    return {
+        "user_id":      user_id,
+        "current_path": [],
+        "state":        "idle",
+        "created_at":   None,
+        "updated_at":   None,
+    }
+
+
+def _decode_path(raw: str) -> list:
+    """current_path 欄位解碼；任何錯誤一律回 []，不讓壞資料弄壞 caller。"""
+    try:
+        path = json.loads(raw or "[]")
+        return path if isinstance(path, list) else []
+    except (TypeError, ValueError):
+        return []
+
 
 def get_session(user_id: str) -> dict:
     """取得 session；不存在則回傳預設值（不寫入 DB）。"""
@@ -63,60 +98,33 @@ def get_session(user_id: str) -> dict:
         ).fetchone()
 
     if row is None:
-        return {
-            "user_id":      user_id,
-            "state":        "idle",
-            "resolved_ids": [],
-            "pending_dims": [],
-            "current_dim":  None,
-            "raw_input":    None,
-            "turn_count":   0,
-            "created_at":   None,
-            "updated_at":   None,
-        }
+        return _default_session(user_id)
 
     return {
         "user_id":      row["user_id"],
-        "state":        row["state"],
-        "resolved_ids": json.loads(row["resolved_ids"]),
-        "pending_dims": json.loads(row["pending_dims"]),
-        "current_dim":  row["current_dim"],
-        "raw_input":    row["raw_input"],
-        "turn_count":   row["turn_count"],
+        "current_path": _decode_path(row["current_path"]),
+        "state":        row["state"] or "idle",
         "created_at":   row["created_at"],
         "updated_at":   row["updated_at"],
     }
 
 
-# ── 寫入 ──────────────────────────────────────────────
-
 def save_session(session: dict):
-    """新增或更新整筆 session。"""
+    """新增或更新 session。"""
     now = _now()
     created = session.get("created_at") or now
-
     with get_conn() as conn:
         conn.execute("""
-            INSERT INTO sessions
-                (user_id, state, resolved_ids, pending_dims, current_dim,
-                 raw_input, turn_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (user_id, current_path, state, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
+                current_path = excluded.current_path,
                 state        = excluded.state,
-                resolved_ids = excluded.resolved_ids,
-                pending_dims = excluded.pending_dims,
-                current_dim  = excluded.current_dim,
-                raw_input    = excluded.raw_input,
-                turn_count   = excluded.turn_count,
                 updated_at   = excluded.updated_at
         """, (
             session["user_id"],
-            session["state"],
-            json.dumps(session["resolved_ids"],  ensure_ascii=False),
-            json.dumps(session["pending_dims"],  ensure_ascii=False),
-            session.get("current_dim"),
-            session.get("raw_input"),
-            session.get("turn_count", 0),
+            json.dumps(session.get("current_path", []), ensure_ascii=False),
+            session.get("state", "idle"),
             created,
             now,
         ))
@@ -124,48 +132,26 @@ def save_session(session: dict):
 
 
 def reset_session(user_id: str):
-    """對話結束後清除 session，回到 idle。"""
     with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM sessions WHERE user_id = ?", (user_id,)
-        )
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         conn.commit()
 
 
-# ── 對話記錄 ───────────────────────────────────────────
-
-def log_conversation(session: dict, status: str, qa_id: str | None = None):
-    """將已結束的對話寫入 conversations 永久記錄。"""
-    with get_conn() as conn:
-        conn.execute("""
-            INSERT INTO conversations
-                (user_id, raw_input, resolved_ids, status, qa_id, turn_count, created_at, ended_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            session.get("user_id"),
-            session.get("raw_input"),
-            json.dumps(session.get("resolved_ids", []), ensure_ascii=False),
-            status,
-            qa_id,
-            session.get("turn_count", 0),
-            session.get("created_at"),
-            _now(),
-        ))
-        conn.commit()
-
-
-# ── 留言 ──────────────────────────────────────────────
+# ── 留言 ──────────────────────────────────────────────────
 
 def save_message(user_id: str, display_name: str, content: str):
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO messages (user_id, display_name, content, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, display_name, content, _now())
+            "INSERT INTO messages (user_id, display_name, content, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (user_id, display_name, content, _now()),
         )
         conn.commit()
 
 
-def get_messages(handled: int | None = None, start: str | None = None, end: str | None = None) -> list[dict]:
+def get_messages(handled: int | None = None,
+                 start: str | None = None,
+                 end: str | None = None) -> list[dict]:
     sql = "SELECT * FROM messages"
     conditions = []
     params: list = []
@@ -185,23 +171,35 @@ def get_messages(handled: int | None = None, start: str | None = None, end: str 
         rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
+
 def mark_handled(msg_id: int, handled: int):
     with get_conn() as conn:
-        conn.execute("UPDATE messages SET handled = ? WHERE id = ?", (handled, msg_id))
+        conn.execute(
+            "UPDATE messages SET handled = ? WHERE id = ?",
+            (handled, msg_id),
+        )
         conn.commit()
 
 
-# ── 工具 ──────────────────────────────────────────────
+def delete_message(msg_id: int) -> bool:
+    """永久刪除一則留言。回傳 True 代表確實有刪到一筆。"""
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM messages WHERE id = ?", (msg_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+# ── 工具 ──────────────────────────────────────────────────
 
 def is_expired(session: dict, timeout_secs: int) -> bool:
-    """回傳 True 表示 session 的最後更新時間已超過 timeout_secs 秒。"""
+    """session 的最後更新時間已超過 timeout_secs 秒回 True。"""
     updated = session.get("updated_at")
     if not updated:
         return False
     try:
         last = datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ")
         return (datetime.utcnow() - last).total_seconds() > timeout_secs
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 

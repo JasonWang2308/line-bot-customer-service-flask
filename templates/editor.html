@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>選單編輯器 — Demo Service</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='editor.css') }}">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+  <!-- ── 品牌列 ─────────────────────────────────────── -->
+  <header class="brand-bar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <defs>
+            <linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1a73e8"/>
+              <stop offset="100%" stop-color="#14b8a6"/>
+            </linearGradient>
+          </defs>
+          <path fill="url(#brand-grad)" d="M12 2 L20 7 V17 L12 22 L4 17 V7 Z" />
+          <path fill="white" opacity="0.3" d="M12 2 L20 7 L12 12 L4 7 Z" />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">Customer Service Bot</div>
+        <div class="brand-tagline">Console · Bot Admin</div>
+      </div>
+    </div>
+    <nav class="brand-nav">
+      <a href="/admin/messages" target="_blank" rel="noopener">留言管理</a>
+    </nav>
+  </header>
+
+  <!-- ── 工具列（分頁 + 動作）───────────────────────── -->
+  <header class="topbar">
+    <div class="tabs">
+      <button class="tab active" data-tab="edit" type="button">編輯</button>
+      <button class="tab" data-tab="tree" type="button">樹狀圖預覽</button>
+      <button class="tab" data-tab="templates" type="button">公版管理</button>
+    </div>
+    <div class="actions" id="edit-actions">
+      <button id="btn-add" type="button">＋ 新增子節點</button>
+      <button id="btn-del" type="button">刪除</button>
+      <button id="btn-up" type="button">↑ 上移</button>
+      <button id="btn-down" type="button">↓ 下移</button>
+      <button id="btn-reload" type="button">重新載入</button>
+      <button id="btn-save" type="button" class="primary">儲存</button>
+    </div>
+  </header>
+
+  <!-- ── 編輯分頁 ───────────────────────────────────── -->
+  <main id="edit-pane" class="pane">
+    <aside class="tree-list">
+      <header class="panel-header">
+        <h3>選單結構</h3>
+        <p>點擊節點即可編輯，▾/▸ 可摺疊分支</p>
+      </header>
+      <ul id="tree-root"></ul>
+    </aside>
+
+    <section class="form-pane">
+
+      <section class="form-section">
+        <header class="form-section-head">
+          <h3>基本資訊</h3>
+          <p>使用者在 LINE 看到的標題與這個節點的角色定位</p>
+        </header>
+        <label for="f-label">標題</label>
+        <input type="text" id="f-label" autocomplete="off">
+
+        <label>類型</label>
+        <div class="radio-group">
+          <label><input type="radio" name="type" value="branch"> <span>分支（底下還有選項）</span></label>
+          <label><input type="radio" name="type" value="leaf"> <span>答覆（顯示文字後結束）</span></label>
+          <label><input type="radio" name="type" value="empty"> <span>暫不設定</span></label>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <header class="form-section-head">
+          <h3>內容設定</h3>
+          <p>依類型不同填寫對應欄位；答覆類型可從公版一鍵帶入</p>
+        </header>
+
+        <label for="f-desc">敘述（分支用，顯示在子選項上方）</label>
+        <textarea id="f-desc" rows="5"></textarea>
+
+        <label for="f-template">套用公版（一鍵填入到下方「回覆內容」）</label>
+        <div class="apply-row">
+          <select id="f-template">
+            <option value="">選擇公版...</option>
+          </select>
+          <button id="btn-apply-tpl" type="button">套用</button>
+        </div>
+        <div class="hint">套用後仍可在下方自由修改；不會與公版連動。</div>
+
+        <label for="f-text">回覆內容（答覆用）</label>
+        <textarea id="f-text" rows="12"></textarea>
+      </section>
+
+      <section class="form-section">
+        <header class="form-section-head">
+          <h3>動作綁定</h3>
+          <p>進階：把節點交給程式邏輯處理，例如收集留言或撥打電話</p>
+        </header>
+
+        <label for="f-action">動作類型（觸發特殊行為，僅葉節點/未設定可用）</label>
+        <select id="f-action">
+          <option value="">無（依類型顯示內容）</option>
+        </select>
+        <div class="hint" id="f-action-hint">設定後會覆蓋此節點的回覆內容，改由程式邏輯處理（例如收集留言）。</div>
+
+        <div id="f-phone-group" class="phone-group" hidden>
+          <label for="f-phone">電話號碼（撥打電話 action 用）</label>
+          <input type="text" id="f-phone" autocomplete="off" placeholder="例：02-1234-5678 或 +886-2-1234-5678">
+          <div class="hint">允許數字、空格、連字號、括號、+。實際撥號時會自動清除非數字字元（保留 +）。</div>
+        </div>
+      </section>
+
+      <div class="form-footer">
+        <button id="btn-apply" type="button" class="primary">套用變更到此節點</button>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── 樹狀圖預覽分頁 ─────────────────────────────── -->
+  <main id="tree-pane" class="pane hidden">
+    <svg id="tree-svg"></svg>
+    <div class="tree-hint">滑鼠拖曳可平移、滾輪可縮放、點選節點可跳到編輯</div>
+  </main>
+
+  <!-- ── 公版管理分頁 ───────────────────────────────── -->
+  <main id="templates-pane" class="pane hidden">
+    <aside class="tree-list">
+      <header class="panel-header">
+        <h3>公版列表</h3>
+        <p>可重複使用的回覆內容片段</p>
+      </header>
+      <button id="btn-tpl-new" type="button" class="primary tpl-new-btn">＋ 新增公版</button>
+      <ul id="tpl-list"></ul>
+    </aside>
+
+    <section class="form-pane">
+
+      <section class="form-section">
+        <header class="form-section-head">
+          <h3>公版資訊</h3>
+          <p>識別碼與顯示名稱</p>
+        </header>
+
+        <label for="tpl-id">識別碼 (id)</label>
+        <input type="text" id="tpl-id" autocomplete="off" placeholder="如 video_tutorial（英數/底線/連字號）">
+        <div class="hint">建立後不可修改；若要改 id 請刪除舊的再建一個。</div>
+
+        <label for="tpl-name">名稱</label>
+        <input type="text" id="tpl-name" autocomplete="off" placeholder="顯示在下拉選單裡的名稱">
+
+        <label for="tpl-description">用途說明</label>
+        <textarea id="tpl-description" rows="2" placeholder="什麼情況下適合用這個公版"></textarea>
+      </section>
+
+      <section class="form-section">
+        <header class="form-section-head">
+          <h3>內容</h3>
+          <p>套用至節點時填入的回覆文字</p>
+        </header>
+        <label for="tpl-text">公版內容</label>
+        <textarea id="tpl-text" rows="14" placeholder="公版的回覆內容文字"></textarea>
+      </section>
+
+      <div class="tpl-actions">
+        <button id="btn-tpl-save" type="button" class="primary">儲存公版</button>
+        <button id="btn-tpl-delete" type="button">刪除公版</button>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── 狀態列 ─────────────────────────────────────── -->
+  <div id="status" class="status">就緒</div>
+
+  <!-- ── 共用 utility (viewer 與 editor 共享) ─────────── -->
+  <script src="{{ url_for('static', filename='menu-utils.js') }}"></script>
+
+  <!-- ── editor 前端模組 (state → toast → api → tree-list → form → tree-viz → templates-mgr → main) -->
+  <script src="{{ url_for('static', filename='editor/state.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/toast.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/tree-list.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/form.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/tree-viz.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/templates-mgr.js') }}"></script>
+  <script src="{{ url_for('static', filename='editor/main.js') }}"></script>
+</body>
+</html>

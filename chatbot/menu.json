@@ -1,0 +1,48 @@
+{
+  "label": "Demo Customer Service",
+  "description": "Tap an option to navigate. This menu is editable from /editor.",
+  "children": [
+    {
+      "label": "Account",
+      "description": "Account-related help.",
+      "children": [
+        { "label": "Update profile",   "text": "Open Account > Profile and edit the fields you need, then click Save." },
+        { "label": "Change password",  "text": "Account > Security > Change password. You will be signed out of other devices." },
+        { "label": "Delete account",   "text": "Account > Settings > Delete account. This is irreversible and removes all your data within 30 days." }
+      ]
+    },
+    {
+      "label": "Billing",
+      "description": "Invoices and payments.",
+      "children": [
+        { "label": "Download an invoice", "text": "Sign in, then Account > Billing > Invoices. Click the PDF icon next to the charge." },
+        { "label": "Update payment method", "text": "Account > Billing > Payment methods. Add a new card before removing the old one to avoid an interruption." },
+        { "label": "Refund request",  "text": "Use the form at Account > Billing > Refund request. Most refunds settle in 5-7 business days." }
+      ]
+    },
+    {
+      "label": "Subscription",
+      "description": "Plan changes.",
+      "children": [
+        { "label": "Upgrade plan",      "text": "Account > Subscription > Change plan. Upgrades take effect immediately." },
+        { "label": "Downgrade plan",    "text": "Account > Subscription > Change plan. Downgrades take effect at the end of the current period." },
+        { "label": "Cancel subscription","text": "Account > Subscription > Cancel. Access continues until the end of the period you have paid for." }
+      ]
+    },
+    {
+      "label": "Other",
+      "children": [
+        {
+          "action": "call_phone",
+          "label": "Talk to a real person",
+          "phone": "02-XXXXXXXX",
+          "text": "Support line\n02-XXXXXXXX\n\nOn mobile, tap the button below to dial. Office hours: Mon-Fri 09:00-18:00."
+        },
+        {
+          "action": "collect_message",
+          "label": "Leave a message"
+        }
+      ]
+    }
+  ]
+}
